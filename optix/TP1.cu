@@ -58,16 +58,15 @@ extern "C" __global__ void __closesthit__radiance()
     else
         prd = sbtData.color;
 
-    //Aqui pegar a normal do pixel
+    // Normal do pixel
     float4 normal = (1.f-u-v) * sbtData.vertexD.normal[index.x]
         +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];;
-    //Calcular
-    float4 light = normalize(LightDir);
+        +         v * sbtData.vertexD.normal[index.z];
 
-    float value = max(dot(normalize(normal), light), 0.0);
 
-    prd = prd * (1 - value);
+    // I=L•N*C*I_l
+    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f) ;
+
 
     float4 pos
         = (1.f-u-v) * sbtData.vertexD.position[index.x]
@@ -88,7 +87,21 @@ extern "C" __global__ void __closesthit__radiance()
                 u0, u1 );   
 
 
-    prd = prd*0.2 + prd*pixelColorPRD*0.8;
+    const auto &camera = optixLaunchParams.camera; 
+    
+    float3 specularColor = make_float3(0,0,0);
+
+    float3 vertexToEye = normalize(make_float3(pos)-camera.position);
+    float3 lightReflect = make_float3(normalize(reflect(-LightDir,normal)));
+    float specularFactor = dot(vertexToEye,lightReflect);
+    if (specularFactor > 0) {
+        int shininess = 1;
+        specularFactor = pow(specularFactor,shininess);
+        specularColor = pixelColorPRD * 1 * specularFactor;
+    }
+
+    // Componente ambiente + componente difusa*intensidade + componente especular
+    prd = (prd*0.2 + prd*pixelColorPRD*(0.6) * intensidade) + specularColor*0.2 ;
 
 }
 
@@ -242,13 +255,7 @@ extern "C" __global__ void __closesthit__phong_alphaTrans()
     //Aqui pegar a normal do pixel
     float4 normal = (1.f-u-v) * sbtData.vertexD.normal[index.x]
         +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];;
-    //Calcular
-    float4 light = normalize(LightDir);
-
-    float value = max(dot(normalize(normal), light), 0.0);
-
-    prd = prd * (1 - value);
+        +         v * sbtData.vertexD.normal[index.z];
 
     float4 pos
         = (1.f-u-v) * sbtData.vertexD.position[index.x]
@@ -256,20 +263,6 @@ extern "C" __global__ void __closesthit__phong_alphaTrans()
         +         v * sbtData.vertexD.position[index.z];
 
 
-    const auto &camera = optixLaunchParams.camera;  
-    
-
-    // compute ray direction
-    // normalized screen plane position, in [-1, 1]^2
-    const float2 screen(make_float2(ix+.5f,iy+.5f)
-                    / make_float2(optixGetLaunchDimensions().x, optixGetLaunchDimensions().y) * 2.0 - 1.0);
-  /*
-    // note: nau already takes into account the field of view when computing 
-    // camera horizontal and vertival
-    float3 rayDir = normalize(camera.direction
-                           + screen.x  * camera.horizontal
-                           + screen.y * camera.vertical);
-    */
    
     optixTrace(optixLaunchParams.traversable,
                 make_float3(pos),
@@ -283,17 +276,14 @@ extern "C" __global__ void __closesthit__phong_alphaTrans()
                 RAY_TYPE_COUNT, // SBT stride
                 PHONG_RAY_TYPE, // missSBTIndex
                 u0, u1 );   
-/*
-    //convert float (0-1) to int (0-255)
-    const int r = int(255.0f*pixelColorPRD.x);
-    const int g = int(255.0f*pixelColorPRD.y);
-    const int b = int(255.0f*pixelColorPRD.z);
-*/
-    prd = make_float3(cor);    
 
-    if(cor.w < 0.5){
-        prd = pixelColorPRD;//make_float3(r,g,b);
-    }
+
+    // I=L•N*C*I_l
+    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f) ;
+
+
+    prd =  make_float3(cor)*cor.w + pixelColorPRD*(1-cor.w);
+   
 
 }
 
@@ -518,16 +508,11 @@ extern "C" __global__ void __closesthit__phong_glass()
                 t0, t1 );   
 
 
-/*
-    //convert float (0-1) to int (0-255)
-    const int r = int(255.0f*pixelColorPRD.x);
-    const int g = int(255.0f*pixelColorPRD.y);
-    const int b = int(255.0f*pixelColorPRD.z);
-*/
-    //if(r == 0 && g == 0 && b == 0)
-        prd = pixelColorPRDTransparent*0.8 + pixelColorPRD*0.1 + prd*0.1;
-    //else
-      //  prd = prd*1.0;
+    // I=L•N*C*I_l
+    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f) ;
+
+    prd = pixelColorPRDTransparent*0.8 + pixelColorPRD*0.1 + prd*0.1;
+
 }
 
 

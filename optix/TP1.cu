@@ -213,7 +213,7 @@ extern "C" __global__ void __closesthit__phong_alphaTrans()
 
     float3 pixelColorPRD = make_float3(1.f);
     uint32_t u0, u1;
-    packPointer( &pixelColorPRD, u0, u1 );  
+    packPointer( &pixelColorPRD, u0, u1 ); 
 
     float4 LightDir =optixLaunchParams.global->lightDir;
     
@@ -277,14 +277,41 @@ extern "C" __global__ void __closesthit__phong_alphaTrans()
                 PHONG_RAY_TYPE, // missSBTIndex
                 u0, u1 );   
 
+    float3 sombra = make_float3(1.f);
+    uint32_t s0, s1;
+    packPointer( &sombra, s0, s1 ); 
+
+    // raio sombra 
+    optixTrace(optixLaunchParams.traversable,
+                make_float3(pos),
+                make_float3(-LightDir),
+                0.001f, // tmin
+                1e20f, // tmax
+                0.0f, // rayTime
+                OptixVisibilityMask( 255 ),
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+                SHADOW, // SBT offset
+                RAY_TYPE_COUNT, // SBT stride
+                SHADOW, // missSBTIndex
+                s0, s1 );
 
     // I=L•N*C*I_l
-    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f) ;
+    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f);
 
+    const auto &camera = optixLaunchParams.camera; 
 
-    prd =  make_float3(cor)*cor.w + pixelColorPRD*(1-cor.w);
-   
+    float3 specularColor = make_float3(0,0,0);
 
+    float3 vertexToEye = normalize(make_float3(pos)-camera.position);
+    float3 lightReflect = make_float3(normalize(reflect(-LightDir,normal)));
+    float specularFactor = dot(vertexToEye,lightReflect);
+    if (specularFactor > 0) {
+        int shininess = 1;
+        specularFactor = pow(specularFactor,shininess);
+        specularColor = pixelColorPRD * 1 * specularFactor;
+    }
+
+    prd =  (make_float3(cor)*0.2 + make_float3(cor)*sombra*intensidade*0.6  + specularColor*0.2)*cor.w + pixelColorPRD*(1-cor.w);
 }
 
 
@@ -377,7 +404,7 @@ extern "C" __global__ void __closesthit__shadow_alphaTrans() {
 }
 
 
-// miss sets the bacgground color
+// miss sets the background color
 extern "C" __global__ void __miss__shadow_alphaTrans() {
     
     float3 &prd = *(float3*)getPRD<float3>();
@@ -505,14 +532,42 @@ extern "C" __global__ void __closesthit__phong_glass()
                 PHONG_RAY_TYPE, // SBT offset
                 RAY_TYPE_COUNT, // SBT stride
                 PHONG_RAY_TYPE, // missSBTIndex
-                t0, t1 );   
+                t0, t1 );
 
+    float3 sombra = make_float3(1.f);
+    uint32_t s0, s1;
+    packPointer( &sombra, s0, s1);
+
+    optixTrace(optixLaunchParams.traversable,
+                make_float3(pos),
+                make_float3(-LightDir),
+                0.001f, // tmin
+                1e20f, // tmax
+                0.0f, // rayTime
+                OptixVisibilityMask( 255 ),
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+                SHADOW, // SBT offset
+                RAY_TYPE_COUNT, // SBT stride
+                SHADOW, // missSBTIndex
+                s0, s1 );   
 
     // I=L•N*C*I_l
-    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f) ;
+    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f);
 
-    prd = pixelColorPRDTransparent*0.8 + pixelColorPRD*0.1 + prd*0.1;
+    const auto &camera = optixLaunchParams.camera; 
 
+    float3 specularColor = make_float3(0,0,0);
+
+    float3 vertexToEye = normalize(make_float3(pos)-camera.position);
+    float3 lightReflect = make_float3(normalize(reflect(-LightDir,normal)));
+    float specularFactor = dot(vertexToEye,lightReflect);
+    if (specularFactor > 0) {
+        int shininess = 1;
+        specularFactor = pow(specularFactor,shininess);
+        specularColor = pixelColorPRD * 1 * specularFactor;
+    }
+
+    prd = (prd*0.2 + prd*sombra*intensidade*0.6 + specularColor*0.2)*0.1 + pixelColorPRDTransparent*0.8 + pixelColorPRD*0.1;
 }
 
 

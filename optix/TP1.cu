@@ -111,7 +111,7 @@ extern "C" __global__ void __anyhit__radiance() {
 }
 
 
-// miss sets the bacgground color
+// miss sets the background color
 extern "C" __global__ void __miss__radiance() {
 
     float3 &prd = *(float3*)getPRD<float3>();
@@ -190,7 +190,7 @@ extern "C" __global__ void __closesthit__shadow() {
 }
 
 
-// miss sets the bacgground color
+// miss sets the background color
 extern "C" __global__ void __miss__shadow() {
     
     float3 &prd = *(float3*)getPRD<float3>();
@@ -320,7 +320,7 @@ extern "C" __global__ void __anyhit__phong_alphaTrans() {
 }
 
 
-// miss sets the bacgground color
+// miss sets the background color
 extern "C" __global__ void __miss__phong_alphaTrans() {
 
     float3 &prd = *(float3*)getPRD<float3>();
@@ -521,6 +521,7 @@ extern "C" __global__ void __closesthit__phong_glass()
     uint32_t t0, t1;
     packPointer( &pixelColorPRDTransparent, t0, t1 );  
 
+    // Vai causar erros por demasiados traces, seria necessário gravar a profundidade de um raio
     optixTrace(optixLaunchParams.traversable,
                 make_float3(pos),
                 rayDir,
@@ -576,7 +577,7 @@ extern "C" __global__ void __anyhit__phong_glass() {
 }
 
 
-// miss sets the bacgground color
+// miss sets the background color
 extern "C" __global__ void __miss__phong_glass() {
 
     float3 &prd = *(float3*)getPRD<float3>();
@@ -638,8 +639,8 @@ extern "C" __global__ void __closesthit__shadow_glass() {
                 SHADOW, // missSBTIndex
                 u0, u1 );   
 
-
-    prd = pixelColorPRD;
+    // Escurece um pouco
+    prd = pixelColorPRD*make_float3(0.9);
 
 }
 

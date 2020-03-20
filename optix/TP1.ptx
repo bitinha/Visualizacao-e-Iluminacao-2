@@ -1401,9 +1401,9 @@ BB13_7:
 	.local .align 4 .b8 	__local_depot17[12];
 	.reg .b64 	%SP;
 	.reg .b64 	%SPL;
-	.reg .f32 	%f<46>;
+	.reg .f32 	%f<51>;
 	.reg .b32 	%r<17>;
-	.reg .b64 	%rd<23>;
+	.reg .b64 	%rd<21>;
 
 
 	mov.u64 	%SPL, __local_depot17;
@@ -1484,12 +1484,15 @@ BB13_7:
 	// inline asm
 	call (%r4, %r5), _optix_trace_2, (%rd2, %f6, %f7, %f8, %f3, %f4, %f5, %f12, %f13, %f14, %r6, %r10, %r10, %r9, %r10, %r11, %r12);
 	// inline asm
-	ld.local.u32 	%rd21, [%rd4];
-	ld.local.f32 	%f45, [%rd4+8];
-	ld.local.u32 	%rd22, [%rd4+4];
-	st.u32 	[%rd10+4], %rd22;
-	st.u32 	[%rd10], %rd21;
-	st.f32 	[%rd10+8], %f45;
+	ld.local.f32 	%f45, [%rd4];
+	mul.ftz.f32 	%f46, %f45, 0f3F666666;
+	ld.local.f32 	%f47, [%rd4+4];
+	mul.ftz.f32 	%f48, %f47, 0f3F666666;
+	ld.local.f32 	%f49, [%rd4+8];
+	mul.ftz.f32 	%f50, %f49, 0f3F666666;
+	st.f32 	[%rd10], %f46;
+	st.f32 	[%rd10+4], %f48;
+	st.f32 	[%rd10+8], %f50;
 	ret;
 }
 

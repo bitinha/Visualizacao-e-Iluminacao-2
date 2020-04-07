@@ -2,7 +2,7 @@
 #include <optix.h>
 #include "LaunchParams.h" // our launch params
 #include <vec_math.h> // NVIDIAs math utils
-
+#include <random.h>
 
 extern "C" {
     __constant__ LaunchParams optixLaunchParams;
@@ -21,13 +21,13 @@ extern "C" __global__ void __closesthit__radiance()
 
     float3 pixelColorPRD = make_float3(1.f);
     uint32_t u0, u1;
-    packPointer( &pixelColorPRD, u0, u1 );  
-    
+    packPointer( &pixelColorPRD, u0, u1 );
+
+    float raysPerPixel = float(optixLaunchParams.frame.raysPerPixel);
+
     // get the payload variable
     float3 &prd = *(float3*)getPRD<float3>();
-
-    const int ix = optixGetLaunchIndex().x;
-    const int iy = optixGetLaunchIndex().y;
+    prd = make_float3(0);
 
     // get mesh data
     const TriangleMeshSBTData &sbtData
@@ -37,70 +37,73 @@ extern "C" __global__ void __closesthit__radiance()
     const int   primID = optixGetPrimitiveIndex();
     const uint3 index  = sbtData.index[primID];
 
+    const int ix = optixGetLaunchIndex().x;
+    const int iy = optixGetLaunchIndex().y;
+
     // get barycentric coordinates
-    const float u = optixGetTriangleBarycentrics().x;
-    const float v = optixGetTriangleBarycentrics().y;
+    const float uu = optixGetTriangleBarycentrics().x;
+    const float vv = optixGetTriangleBarycentrics().y;
 
-    if (sbtData.hasTexture && sbtData.vertexD.texCoord0) {
+    float4 pos = (1.f-uu-vv) * sbtData.vertexD.position[index.x]
+            +         uu * sbtData.vertexD.position[index.y]
+            +         vv * sbtData.vertexD.position[index.z];
 
-        // compute pixel texture coordinate
-        const float4 tc
-          = (1.f-u-v) * sbtData.vertexD.texCoord0[index.x]
-          +         u * sbtData.vertexD.texCoord0[index.y]
-          +         v * sbtData.vertexD.texCoord0[index.z];
-        // fetch texture value
-        float4 fromTexture = tex2D<float4>(sbtData.texture,tc.x,tc.y);
-        prd= make_float3(fromTexture);
+    float4 tg = (1.f-uu-vv) * sbtData.vertexD.tangent[index.x]
+            +         uu * sbtData.vertexD.tangent[index.y]
+            +         vv * sbtData.vertexD.tangent[index.z];
+
+    float4 bitg = (1.f-uu-vv) * sbtData.vertexD.bitangent[index.x]
+            +         uu * sbtData.vertexD.bitangent[index.y]
+            +         vv * sbtData.vertexD.bitangent[index.z];
+
+    float4 normal = (1.f-uu-vv) * sbtData.vertexD.normal[index.x]
+            +         uu * sbtData.vertexD.normal[index.y]
+            +         vv * sbtData.vertexD.normal[index.z];
     
-    }
-    else
-        prd = sbtData.color;
+    for (int i = 0; i < raysPerPixel; i++){
+        for (int j = 0; j < raysPerPixel; j++){
+            uint32_t seed = tea<4>(ix * optixGetLaunchDimensions().x + iy, i*raysPerPixel + j);
+            const float u = rnd(seed);
+            const float v = rnd(seed);
 
-    // Normal do pixel
-    float4 normal = (1.f-u-v) * sbtData.vertexD.normal[index.x]
-        +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];
+            float r = sqrt(u);
+            float b = 2*M_PIf*v;
+            float x = r*sin(b);
+            float z = r*cos(b);
+            float y = sqrt(1-r*r);
 
-    float4 pos
-        = (1.f-u-v) * sbtData.vertexD.position[index.x]
-        +         u * sbtData.vertexD.position[index.y]
-        +         v * sbtData.vertexD.position[index.z];
+            float3 bt, t;
 
-    float4 LightDir = pos - optixLaunchParams.global->lightPos;
+            if (normal.x > normal.z){
+                bt = make_float3(-normal.y,normal.x,0);
+                t  = bt * make_float3(normal);
+            } else {
+                bt = make_float3(normal.y,normal.z,0);
+                t  = bt * make_float3(normal);
+            }
 
-    // I=L•N*C*I_l
-    float intensidade = max(dot( -normalize(LightDir),normalize(normal)),0.f) ;
+            float3 p = x * bt + y * make_float3(normal) + z * t;
+            p = normalize(p);
 
-    optixTrace(optixLaunchParams.traversable,
-                make_float3(pos),
-                make_float3(-LightDir),
-                0.001f, // tmin
-                1e20f, // tmax
-                0.0f, // rayTime
-                OptixVisibilityMask( 255 ),
-                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-                SHADOW, // SBT offset
-                RAY_TYPE_COUNT, // SBT stride
-                SHADOW, // missSBTIndex
-                u0, u1 );   
+            optixTrace(optixLaunchParams.traversable,
+             make_float3(pos),
+             p,
+             0.001f,  // tmin
+             300.0f, // tmax
+             0.0f, // rayTime
+             OptixVisibilityMask( 255 ),
+             OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+             SHADOW,         // SBT offset
+             RAY_TYPE_COUNT, // SBT stride
+             SHADOW,         // missSBTIndex 
+             u0, u1 );
 
-
-    const auto &camera = optixLaunchParams.camera; 
-    
-    float3 specularColor = make_float3(0,0,0);
-
-    float3 vertexToEye = normalize(make_float3(pos)-camera.position);
-    float3 lightReflect = make_float3(normalize(reflect(-LightDir,normal)));
-    float specularFactor = dot(vertexToEye,lightReflect);
-    if (specularFactor > 0) {
-        int shininess = 1;
-        specularFactor = pow(specularFactor,shininess);
-        specularColor = pixelColorPRD * 1 * specularFactor;
+            prd += pixelColorPRD/(raysPerPixel*raysPerPixel);
+        }
     }
 
-    // Componente ambiente + componente difusa*intensidade + componente especular
-    prd = (prd*0.2 + prd*pixelColorPRD*(0.6) * intensidade) + specularColor*0.2 ;
-
+    // Componente ambiente + componente difusa*intensidade
+    //prd = prd*0.2 + prd*pixelColorPRD*(0.6);
 }
 
 
@@ -250,7 +253,7 @@ extern "C" __global__ void __closesthit__phong_glass()
     //Aqui pegar a normal do pixel
     float4 normal = (1.f-u-v) * sbtData.vertexD.normal[index.x]
         +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];;
+        +         v * sbtData.vertexD.normal[index.z];
 
     float3 rayDir = optixGetWorldRayDirection();
     float3 reflexDir = rayDir-2*dot(rayDir,make_float3(normal))*make_float3(normal);
@@ -418,7 +421,6 @@ extern "C" __global__ void __miss__shadow_glass() {
     prd = make_float3(1.0f, 1.0f, 1.0f);
     
 }
-
 
 
 

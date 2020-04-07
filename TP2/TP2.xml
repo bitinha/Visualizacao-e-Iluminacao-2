@@ -73,7 +73,7 @@
 						<rtProgram type="MISS" 		 file="optix/TP2.ptx" proc="__miss__radiance"/> 
 					</rayType>
 					<rayType name="Shadow">
-						<rtProgram type="ANY_HIT" file="optix/TP2.ptx" proc="__anyhit__shadow"/> 
+						<rtProgram type="ANY_HIT" file="optix/TP2.ptx" proc="__anyhit__shadow"/>
 						<rtProgram type="CLOSEST_HIT" file="optix/TP2.ptx" proc="__closesthit__shadow"/> 
 						<rtProgram type="MISS" 		 file="optix/TP2.ptx" proc="__miss__shadow"/> 
 					</rayType>

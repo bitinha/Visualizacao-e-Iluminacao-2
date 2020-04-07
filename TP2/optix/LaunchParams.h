@@ -24,6 +24,7 @@ struct RayGenData {
 
 struct GlobalParams{
     float4 lightPos;
+    int jitterMode;
 	cudaTextureObject_t texture;
 } ;
 

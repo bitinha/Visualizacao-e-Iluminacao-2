@@ -3,8 +3,8 @@
 	<assets>
 		<scenes>
 			<scene name="MainScene" >
-				<!--file name="models/sponza/crytek-sponza/sponza.nbo" /-->
-                <file name="models/cornellBox/CornellBox-Sphere2.obj" />
+				<file name="models/sponza/crytek-sponza/sponza.nbo" />
+                <!--file name="models/cornellBox/CornellBox-Sphere2.obj" /-->
 			</scene>
 		</scenes>
 		<viewports>

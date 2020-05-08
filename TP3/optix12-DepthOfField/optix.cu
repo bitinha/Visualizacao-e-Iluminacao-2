@@ -113,7 +113,7 @@ extern "C" __global__ void __closesthit__radiance() {
     packPointer( &shadowAttPRD, u0, u1 );  
   
     // trace shadow ray
-    int squaredShadowRays = optixLaunchParams.global->shadowRays;
+    int squaredShadowRays = 1;
     float shadowTotal = 0.0f;
     for (int i = 0; i < squaredShadowRays; ++i) {
         for (int j = 0; j < squaredShadowRays; ++j) {
@@ -258,7 +258,7 @@ extern "C" __global__ void __miss__light_shadow() {
 
 // -----------------------------------------------
 // Metal Phong rays
-
+/*
 extern "C" __global__ void __closesthit__phong_metal() {
 
     const TriangleMeshSBTData &sbtData
@@ -328,7 +328,7 @@ extern "C" __global__ void __closesthit__phong_metal() {
 }
 
 
-
+*/
 
 
 // -----------------------------------------------
@@ -526,6 +526,9 @@ extern "C" __global__ void __raygen__renderFrame() {
 		printf("===========================================\n");
 	}
 
+    float lensDistance = optixLaunchParams.global->lensDistance;
+    float3 frente = normalize( cross(camera.horizontal,camera.vertical));
+    float3 lensCentre = camera.position - frente*lensDistance;
 
     // ray payload
     colorPRD pixelColorPRD;
@@ -555,13 +558,18 @@ extern "C" __global__ void __raygen__renderFrame() {
         
         // note: nau already takes into account the field of view and ratio when computing 
         // camera horizontal and vertival
+/*
             float3 rayDir = normalize(camera.direction
                                 + (screen.x ) * camera.horizontal
                                 + (screen.y ) * camera.vertical);
+*/
+            float3 cPos = camera.position+(-screen.x ) * camera.horizontal + (-screen.y ) * camera.vertical;
+
+            float3 rayDir = normalize(lensCentre - cPos);
             
             // trace primary ray
             optixTrace(optixLaunchParams.traversable,
-                    camera.position,
+                    lensCentre,
                     rayDir,
                     0.f,    // tmin
                     1e20f,  // tmax

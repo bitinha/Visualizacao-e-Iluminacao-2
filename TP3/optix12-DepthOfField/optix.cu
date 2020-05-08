@@ -1,13 +1,12 @@
-
 #include <optix.h>
 #include "random.h"
 #include "LaunchParams7.h" // our launch params
 #include <vec_math.h> // NVIDIAs math utils
 
-
 extern "C" {
     __constant__ LaunchParams optixLaunchParams;
 }
+
 //  a single ray type
 enum { PHONG=0, SHADOW, RAY_TYPE_COUNT };
 
@@ -20,7 +19,6 @@ struct shadowPRD{
     float shadowAtt;
     unsigned int seed;
 } ;
-
 
 struct Onb
 {
@@ -496,15 +494,8 @@ extern "C" __global__ void __miss__shadow_glass() {
     prd.shadowAtt = 1.0f;
 }
 
-
-
-
-
-
-
 // -----------------------------------------------
 // Primary Rays
-
 
 extern "C" __global__ void __raygen__renderFrame() {
 
@@ -513,9 +504,7 @@ extern "C" __global__ void __raygen__renderFrame() {
     const int iy = optixGetLaunchIndex().y;
     const auto &camera = optixLaunchParams.camera;  
     
-
 	if (optixLaunchParams.frame.frame == 0 && ix == 0 && iy == 0) {
-
 		// print info to console
 		printf("===========================================\n");
         printf("Nau Ray-Tracing Debug\n");
@@ -527,8 +516,8 @@ extern "C" __global__ void __raygen__renderFrame() {
 	}
 
     float lensDistance = optixLaunchParams.global->lensDistance;
-    float3 frente = normalize( cross(camera.horizontal,camera.vertical));
-    float3 lensCentre = camera.position - frente*lensDistance;
+    float3 frente = normalize(cross(camera.vertical,camera.horizontal));
+    float3 lensCentre = camera.position + frente*lensDistance;
 
     // ray payload
     colorPRD pixelColorPRD;
@@ -563,7 +552,7 @@ extern "C" __global__ void __raygen__renderFrame() {
                                 + (screen.x ) * camera.horizontal
                                 + (screen.y ) * camera.vertical);
 */
-            float3 cPos = camera.position+(-screen.x ) * camera.horizontal + (-screen.y ) * camera.vertical;
+            float3 cPos = camera.position+(-screen.x)*camera.horizontal + (-screen.y ) * camera.vertical;
 
             float3 rayDir = normalize(lensCentre - cPos);
             
@@ -599,5 +588,3 @@ extern "C" __global__ void __raygen__renderFrame() {
     // write to output buffer
     optixLaunchParams.frame.colorBuffer[fbIndex] = rgba;
 }
-  
-

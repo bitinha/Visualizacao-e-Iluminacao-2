@@ -20,54 +20,6 @@ struct shadowPRD{
     unsigned int seed;
 } ;
 
-struct Onb
-{
-  __forceinline__ __device__ Onb(const float3& normal)
-  {
-    m_normal = normal;
-
-    if( fabs(m_normal.x) > fabs(m_normal.z) )
-    {
-      m_binormal.x = -m_normal.y;
-      m_binormal.y =  m_normal.x;
-      m_binormal.z =  0;
-    }
-    else
-    {
-      m_binormal.x =  0;
-      m_binormal.y = -m_normal.z;
-      m_binormal.z =  m_normal.y;
-    }
-
-    m_binormal = normalize(m_binormal);
-    m_tangent = normalize(cross( m_binormal, m_normal ));
-    //m_binormal = cross(m_normal, m_tangent);
-  }
-
-  __forceinline__ __device__ void inverse_transform(float3& p) const
-  {
-    p = p.z*m_tangent + p.x*m_binormal + p.y*m_normal;
-  }
-
-  float3 m_tangent;
-  float3 m_binormal;
-  float3 m_normal;
-};
-
-
-static __forceinline__ __device__ void cosine_power_sample_hemisphere(const float u1, const float u2, float3& p, float exponent)
-{
-    const float t = pow(u2, (1/(exponent + 1)));
-    const float aux = sqrt(1-t*t);
-    const float pi_times_2_times_u1 = 6.28318530717 * u1;
-    p.z = cos(pi_times_2_times_u1)* aux;
-    p.x = sin(pi_times_2_times_u1)* aux;
-    p.y = t;
-    
-}
-
-
-
 
 // -------------------------------------------------------
 // closest hit computes color based lolely on the triangle normal
@@ -197,302 +149,7 @@ extern "C" __global__ void __miss__shadow() {
 }
 
 
-// -----------------------------------------------
-// Light material
 
-
-extern "C" __global__ void __closesthit__light() {
-
-    colorPRD &prd = *(colorPRD*)getPRD<colorPRD>();
-    prd.color = make_float3(1.0f);
-}
-
-
-extern "C" __global__ void __anyhit__light() {
-}
-
-
-extern "C" __global__ void __miss__light() {
-}
-
-
-extern "C" __global__ void __closesthit__light_shadow() {
-
-    const TriangleMeshSBTData &sbtData
-      = *(const TriangleMeshSBTData*)optixGetSbtDataPointer();  
-
-    // retrieve primitive id and indexes
-    const int   primID = optixGetPrimitiveIndex();
-    const uint3 index  = sbtData.index[primID];
-
-    // get barycentric coordinates
-    const float u = optixGetTriangleBarycentrics().x;
-    const float v = optixGetTriangleBarycentrics().y;
-
-    // compute normal
-    const float4 n
-        = (1.f-u-v) * sbtData.vertexD.normal[index.x]
-        +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];
-
-    float3 intersectionPoint = optixGetWorldRayOrigin() + optixGetRayTmax()*optixGetWorldRayDirection();
-    float ndotl = max(0.0f, dot(normalize(make_float3(n)), -normalize(intersectionPoint-optixGetWorldRayOrigin())));
-    shadowPRD &prd = *(shadowPRD*)getPRD<shadowPRD>();
-    prd.shadowAtt = ndotl;
-}
-
-
-// any hit to ignore intersections based on alpha transparency
-extern "C" __global__ void __anyhit__light_shadow() {
-}
-
-
-// miss sets the background color
-extern "C" __global__ void __miss__light_shadow() {
-}
-
-
-
-
-// -----------------------------------------------
-// Metal Phong rays
-/*
-extern "C" __global__ void __closesthit__phong_metal() {
-
-    const TriangleMeshSBTData &sbtData
-      = *(const TriangleMeshSBTData*)optixGetSbtDataPointer();  
-
-    // retrieve primitive id and indexes
-    const int   primID = optixGetPrimitiveIndex();
-    const uint3 index  = sbtData.index[primID];
-
-    // get barycentric coordinates
-    const float u = optixGetTriangleBarycentrics().x;
-    const float v = optixGetTriangleBarycentrics().y;
-
-    // compute normal
-    const float4 n
-        = (1.f-u-v) * sbtData.vertexD.normal[index.x]
-        +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];
-    // ray payload
-
-    float3 normal = normalize(make_float3(n));
-
-    // entering glass
-    //if (dot(optixGetWorldRayDirection(), normal) < 0)
-
-    colorPRD &prd = *(colorPRD*)getPRD<colorPRD>();
-
-    colorPRD afterPRD;
-    afterPRD.color = make_float3(1.0f);
-    afterPRD.seed = prd.seed;
-    uint32_t u0, u1;
-    packPointer( &afterPRD, u0, u1 );  
-
-    const float3 pos = optixGetWorldRayOrigin() + optixGetRayTmax()*optixGetWorldRayDirection();
-    //(1.f-u-v) * A + u * B + v * C;
-    
-    const float glossiness = optixLaunchParams.global->glossiness;
-    const int glossy_rays = optixLaunchParams.global->glossyRays;
-    float3 glossy = make_float3(0.0f);
-    float3 rayDir;
-    float3 reflectDir = reflect(optixGetWorldRayDirection(), normal);
-    for (int i = 0; i < glossy_rays; ++i) {
-        afterPRD.color = make_float3(1.0f);
-        do {
-            const float z1 = rnd(prd.seed);
-            const float z2 = rnd(prd.seed);
-            cosine_power_sample_hemisphere( z1, z2, rayDir, glossiness );
-            Onb onb( reflectDir );
-            onb.inverse_transform( rayDir );
-        } while (dot(rayDir, normal) < 0.001);
-        
-        optixTrace(optixLaunchParams.traversable,
-            pos,
-            rayDir,
-            0.04f,    // tmin is high to void self-intersection
-            1e20f,  // tmax
-            0.0f,   // rayTime
-            OptixVisibilityMask( 255 ),
-            OPTIX_RAY_FLAG_NONE, //OPTIX_RAY_FLAG_NONE,
-            PHONG,             // SBT offset
-            RAY_TYPE_COUNT,     // SBT stride
-            PHONG,             // missSBTIndex 
-            u0, u1 );
-        glossy += afterPRD.color;
-    }
-    prd.color = make_float3(0.8,0.8,0.8) * glossy / glossy_rays;
-}
-
-
-*/
-
-
-// -----------------------------------------------
-// Glass Phong rays
-
-SUTIL_INLINE SUTIL_HOSTDEVICE float3 refract(const float3& i, const float3& n, const float eta) {
-
-    float k = 1.0 - eta * eta * (1.0 - dot(n, i) * dot(n, i));
-    if (k < 0.0)
-        return make_float3(0.0f);
-    else
-        return (eta * i - (eta * dot(n, i) + sqrt(k)) * n);
-}
-
-
-extern "C" __global__ void __closesthit__phong_glass() {
-
-    const TriangleMeshSBTData &sbtData
-      = *(const TriangleMeshSBTData*)optixGetSbtDataPointer();  
-
-    // retrieve primitive id and indexes
-    const int   primID = optixGetPrimitiveIndex();
-    const uint3 index  = sbtData.index[primID];
-
-    // get barycentric coordinates
-    const float u = optixGetTriangleBarycentrics().x;
-    const float v = optixGetTriangleBarycentrics().y;
-
-    // compute normal
-    const float4 n
-        = (1.f-u-v) * sbtData.vertexD.normal[index.x]
-        +         u * sbtData.vertexD.normal[index.y]
-        +         v * sbtData.vertexD.normal[index.z];
-
-    float3 normal = normalize(make_float3(n));
-    const float3 normRayDir = optixGetWorldRayDirection();
-
-    // new ray direction
-    float3 rayDir;
-    // entering glass
-    float dotP;
-    if (dot(normRayDir, normal) < 0) {
-        dotP = dot(normRayDir, -normal);
-        rayDir = refract(normRayDir, normal, 0.66);
-    }
-    // exiting glass
-    else {
-        dotP = 0;
-        rayDir = refract(normRayDir, -normal, 1.5);
-    }
-
-    const float3 pos = optixGetWorldRayOrigin() + optixGetRayTmax() * optixGetWorldRayDirection();
-    
-    // ray payload 
-    colorPRD &prd = *(colorPRD*)getPRD<colorPRD>();
-
-    colorPRD refractPRD;
-    refractPRD.color = make_float3(0.0f);
-    refractPRD.seed = prd.seed;
-    uint32_t u0, u1;
-    packPointer( &refractPRD, u0, u1 );  
-    
-    if (length(rayDir) > 0)
-        optixTrace(optixLaunchParams.traversable,
-            pos,
-            rayDir,
-            0.00001f,    // tmin
-            1e20f,  // tmax
-            0.0f,   // rayTime
-            OptixVisibilityMask( 255 ),
-            OPTIX_RAY_FLAG_NONE, //OPTIX_RAY_FLAG_NONE,
-            PHONG,             // SBT offset
-            RAY_TYPE_COUNT,     // SBT stride
-            PHONG,             // missSBTIndex 
-            u0, u1 );
-
- 
-    colorPRD reflectPRD;
-    reflectPRD.color = make_float3(0.0f);
-    reflectPRD.seed = prd.seed;
-    if (dotP > 0) {
-        float3 reflectDir = reflect(normRayDir, normal);        
-        packPointer( &reflectPRD, u0, u1 );  
-        optixTrace(optixLaunchParams.traversable,
-            pos,
-            reflectDir,
-            0.00001f,    // tmin
-            1e20f,  // tmax
-            0.0f,   // rayTime
-            OptixVisibilityMask( 255 ),
-            OPTIX_RAY_FLAG_NONE, //OPTIX_RAY_FLAG_NONE,
-            PHONG,             // SBT offset
-            RAY_TYPE_COUNT,     // SBT stride
-            PHONG,             // missSBTIndex 
-            u0, u1 );
-        float r0 = (1.5f - 1.0f)/(1.5f + 1.0f);
-        r0 = r0*r0 + (1-r0*r0) * pow(1-dotP,5);
-        prd.color =  refractPRD.color * (1-r0) + r0 * reflectPRD.color;
-    }
-    else
-        prd.color =  refractPRD.color ;
-}
-
-
-
-extern "C" __global__ void __anyhit__phong_glass() {
-
-}
-
-
-// miss sets the background color
-extern "C" __global__ void __miss__phong_glass() {
-
-    colorPRD &prd = *(colorPRD*)getPRD<colorPRD>();
-    // set blue as background color
-    prd.color = make_float3(0.0f, 0.0f, 1.0f);
-}
-
-
-
-// -----------------------------------------------
-// Glass Shadow rays
-
-extern "C" __global__ void __closesthit__shadow_glass() {
-
-    shadowPRD &prd = *(shadowPRD*)getPRD<shadowPRD>();
-    // ray payload
-    shadowPRD afterPRD;
-    afterPRD.shadowAtt = 1.0f;
-    afterPRD.seed = prd.seed;
-    uint32_t u0, u1;
-    packPointer( &afterPRD, u0, u1 );  
-
-    const float3 pos = optixGetWorldRayOrigin() + optixGetRayTmax()*optixGetWorldRayDirection();
-    
-    // trace primary ray
-    optixTrace(optixLaunchParams.traversable,
-        pos,
-        optixGetWorldRayDirection(),
-        0.01f,    // tmin
-        1e20f,  // tmax
-        0.0f,   // rayTime
-        OptixVisibilityMask( 255 ),
-        OPTIX_RAY_FLAG_NONE, //OPTIX_RAY_FLAG_NONE,
-        SHADOW,             // SBT offset
-        RAY_TYPE_COUNT,     // SBT stride
-        SHADOW,             // missSBTIndex 
-        u0, u1 );
-
-    prd.shadowAtt = 0.95f * afterPRD.shadowAtt;
-}
-
-
-// any hit for shadows
-extern "C" __global__ void __anyhit__shadow_glass() {
-
-}
-
-
-// miss for shadows
-extern "C" __global__ void __miss__shadow_glass() {
-
-    shadowPRD &prd = *(shadowPRD*)getPRD<shadowPRD>();
-    // set blue as background color
-    prd.shadowAtt = 1.0f;
-}
 
 // -----------------------------------------------
 // Primary Rays
@@ -549,18 +206,20 @@ extern "C" __global__ void __raygen__renderFrame() {
         
         // note: nau already takes into account the field of view and ratio when computing 
         // camera horizontal and vertival
-/*
-            float3 rayDir = normalize(camera.direction
-                                + (screen.x ) * camera.horizontal
-                                + (screen.y ) * camera.vertical);
-*/
+
             float3 cPos = camera.position+(-screen.x)*camera.horizontal + (-screen.y ) * camera.vertical;
 
             float3 rayDir = normalize(lensCentre - cPos);
 
-            float3 pFocal = normalize(rayDir); // ESPAÇO CAMERA
+            //float3 proj_frente_rayDir = (dot(rayDir,frente)/(length(frente)*length(frente)))*frente; //frente ta normalizado POSSO SIMPLIFICAR
+            float3 proj_frente_rayDir = dot(rayDir,frente)*frente;
 
-            pFocal = pFocal / pFocal.z * (1/((1/focalDistance)-(1/lensDistance))); //d0
+
+            // Vetor que vai do centro da lente para o ponto de foco no plano de foco
+            float3 ray = rayDir * focalDistance / length(proj_frente_rayDir);
+
+            float3 pFocal = lensCentre + ray;
+
 
             float randR = aperture * sqrt(rnd(seed));
 
@@ -569,13 +228,13 @@ extern "C" __global__ void __raygen__renderFrame() {
             float x = randR * cos(randA);
             float y = randR * sin(randA);
 
-            float3 randAperture = make_float3(((lensCentre.x + camera.horizontal * x),(lensCentre.y + camera.vertical * y),lensCentre.z));
+            float3 randAperture = lensCentre + camera.horizontal * x + camera.vertical * y;//make_float3(((lensCentre.x + camera.horizontal * x),(lensCentre.y + camera.vertical * y),lensCentre.z));
 
             float3 rayDirection = pFocal - randAperture;
             
             // trace primary ray
             optixTrace(optixLaunchParams.traversable,
-                    lensCentre,
+                    randAperture,
                     rayDirection,
                     0.f,    // tmin
                     1e20f,  // tmax

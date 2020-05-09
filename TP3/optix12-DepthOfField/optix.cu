@@ -24,9 +24,7 @@ struct shadowPRD{
 // -------------------------------------------------------
 // closest hit computes color based lolely on the triangle normal
 
-extern "C" __global__ void __closesthit__radiance()
-{
-
+extern "C" __global__ void __closesthit__radiance(){
 
     shadowPRD shadowAttPRD;
     shadowAttPRD.shadowAtt = 1.0f;
@@ -101,11 +99,11 @@ extern "C" __global__ void __closesthit__radiance()
                 u0, u1 );   
 
     prd  = prd * min(intensity * shadowAttPRD.shadowAtt + 0.2, 1.0);
-
 }
 
 // nothing to do in here
 extern "C" __global__ void __anyhit__radiance() {
+
 }
 
 
@@ -134,10 +132,8 @@ extern "C" __global__ void __closesthit__shadow() {
 
 // miss sets the background color
 extern "C" __global__ void __miss__shadow() {
-    
-    
+     
 }
-
 
 
 // -----------------------------------------------
@@ -162,8 +158,8 @@ extern "C" __global__ void __raygen__renderFrame() {
 	}
 
     float lensDistance  = optixLaunchParams.global->lensDistance;
-    float focalDistance = optixLaunchParams.global->focalDistance;
-    float aperture = optixLaunchParams.global->aperture;
+    float focalDistance = optixLaunchParams.global->focalDistance * 100;
+    float aperture = optixLaunchParams.global->aperture * 10;
     float3 frente = normalize(cross(camera.vertical,camera.horizontal));
     float3 lensCentre = camera.position + frente*lensDistance;
 
@@ -214,7 +210,7 @@ extern "C" __global__ void __raygen__renderFrame() {
             float x = randR * cos(randA);
             float y = randR * sin(randA);
 
-            float3 randAperture = lensCentre + camera.horizontal * x + camera.vertical * y;//make_float3(((lensCentre.x + camera.horizontal * x),(lensCentre.y + camera.vertical * y),lensCentre.z));
+            float3 randAperture = lensCentre + camera.horizontal * x + camera.vertical * y;
 
             float3 rayDirection = pFocal - randAperture;
             

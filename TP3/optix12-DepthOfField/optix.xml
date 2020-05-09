@@ -28,7 +28,7 @@
 		</cameras>
 		<lights>
 			<light name="Sun" >
-   				<POSITION x="0.0" y="100" z="0.0" />
+   				<POSITION x="0.0" y="1000" z="0.0" />
 			</light>
 		</lights>
 		<materialLibs>   

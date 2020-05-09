@@ -71,19 +71,19 @@ extern "C" __global__ void __closesthit__radiance()
         +         u * sbtData.vertexD.normal[index.y]
         +         v * sbtData.vertexD.normal[index.z];
 
-
-    // I=L•N*C*I_l
-    float intensidade = max(dot(normalize(lightPos),normalize(normal)),0.f) ;
-
-
     float4 pos
         = (1.f-u-v) * sbtData.vertexD.position[index.x]
         +         u * sbtData.vertexD.position[index.y]
         +         v * sbtData.vertexD.position[index.z];
 
+    float4 lightDir = lightPos - pos;
+
+    // I=L•N*C*I_l
+    float intensidade = max(dot(-normalize(lightDir),normalize(normal)),0.f) ;
+
     optixTrace(optixLaunchParams.traversable,
                 make_float3(pos),
-                make_float3(lightPos),
+                make_float3(-lightDir),
                 0.001f, // tmins
                 1e20f, // tmax
                 0.0f, // rayTime
@@ -100,7 +100,7 @@ extern "C" __global__ void __closesthit__radiance()
     float3 specularColor = make_float3(0,0,0);
 
     float3 vertexToEye = normalize(make_float3(pos)-camera.position);
-    float3 lightReflect = make_float3(normalize(reflect(-lightPos,normal)));
+    float3 lightReflect = make_float3(normalize(reflect(-lightDir,normal)));
     float specularFactor = dot(vertexToEye,lightReflect);
     if (specularFactor > 0) {
         int shininess = 1;
@@ -108,8 +108,8 @@ extern "C" __global__ void __closesthit__radiance()
         specularColor = pixelColorPRD * 1 * specularFactor;
     }
 
-    // Componente ambiente + componente difusa*intensidade + componente especular
-    prd = (prd*0.2 + prd*pixelColorPRD*(0.6) * intensidade)  + specularColor*0.2;
+    // Componente ambiente + componente difusa*intensidade
+    prd = (prd*0.2 + prd*pixelColorPRD*(0.8) * intensidade);
 
 }
 

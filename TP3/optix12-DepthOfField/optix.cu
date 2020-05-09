@@ -27,11 +27,12 @@ struct shadowPRD{
 extern "C" __global__ void __closesthit__radiance()
 {
 
-    float3 pixelColorPRD = make_float3(1.f);
-    uint32_t u0, u1;
-    packPointer( &pixelColorPRD, u0, u1 );  
 
-    float4 lightPos = optixLaunchParams.global->lightPos;
+    shadowPRD shadowAttPRD;
+    shadowAttPRD.shadowAtt = 1.0f;
+    uint32_t u0, u1;
+    packPointer( &shadowAttPRD, u0, u1 );  
+
     
     // get the payload variable
     float3 &prd = *(float3*)getPRD<float3>();
@@ -76,16 +77,21 @@ extern "C" __global__ void __closesthit__radiance()
         +         u * sbtData.vertexD.position[index.y]
         +         v * sbtData.vertexD.position[index.z];
 
-    float4 lightDir = lightPos - pos;
 
-    // I=L•N*C*I_l
-    float intensidade = max(dot(-normalize(lightDir),normalize(normal)),0.f) ;
+
+    // direction towards light
+    float3 lPos = make_float3(optixLaunchParams.global->lightPos);
+    float3 lDir = normalize(lPos - make_float3(pos));
+    float3 nn = normalize(make_float3(normal));
+    float intensity = max(dot(lDir, nn),0.0f);
+    float tmax = length(lPos - make_float3(pos));
+    
 
     optixTrace(optixLaunchParams.traversable,
                 make_float3(pos),
-                make_float3(-lightDir),
+                lDir,
                 0.001f, // tmins
-                1e20f, // tmax
+                tmax, // tmax
                 0.0f, // rayTime
                 OptixVisibilityMask( 255 ),
                 OPTIX_RAY_FLAG_DISABLE_ANYHIT,
@@ -94,22 +100,7 @@ extern "C" __global__ void __closesthit__radiance()
                 SHADOW, // missSBTIndex
                 u0, u1 );   
 
-
-    const auto &camera = optixLaunchParams.camera; 
-    
-    float3 specularColor = make_float3(0,0,0);
-
-    float3 vertexToEye = normalize(make_float3(pos)-camera.position);
-    float3 lightReflect = make_float3(normalize(reflect(-lightDir,normal)));
-    float specularFactor = dot(vertexToEye,lightReflect);
-    if (specularFactor > 0) {
-        int shininess = 1;
-        specularFactor = pow(specularFactor,shininess);
-        specularColor = pixelColorPRD * 1 * specularFactor;
-    }
-
-    // Componente ambiente + componente difusa*intensidade
-    prd = (prd*0.2 + prd*pixelColorPRD*(0.8) * intensidade);
+    prd  = prd * min(intensity * shadowAttPRD.shadowAtt + 0.2, 1.0);
 
 }
 
@@ -132,29 +123,20 @@ extern "C" __global__ void __miss__radiance() {
 
 // nothing to do in here
 extern "C" __global__ void __anyhit__shadow() {
-    /*
-    float3 &prd = *(float3*)getPRD<float3>();
-    // set the shadow color
-    prd = make_float3(0.0f, 0.0f, 0.0f);
-    */
+    
 }
   
 // nothing to do in here
 extern "C" __global__ void __closesthit__shadow() {
-    float3 &prd = *(float3*)getPRD<float3>();
-    // set the shadow color
-    prd = make_float3(0.0f, 0.0f, 0.0f);
+    shadowPRD &prd = *(shadowPRD*)getPRD<shadowPRD>();
+    prd.shadowAtt = 0;
 }
 
 // miss sets the background color
 extern "C" __global__ void __miss__shadow() {
     
-    float3 &prd = *(float3*)getPRD<float3>();
-    // set the background color
-    prd = make_float3(1.0f, 1.0f, 1.0f);
     
 }
-
 
 
 
@@ -205,8 +187,6 @@ extern "C" __global__ void __raygen__renderFrame() {
             pixelColorPRD.seed = seed;
             uint32_t u0, u1;
             packPointer( &pixelColorPRD, u0, u1 );  
-            //const float2 subpixel_jitter = make_float2( i * delta.x + delta.x *  rnd( seed ), j * delta.y + delta.y * rnd( seed ) );
-            //const float2 subpixel_jitter = make_float2( rnd( seed )-0.5f, rnd( seed )-0.5f );
             const float2 subpixel_jitter = make_float2(i * delta.x, j * delta.y);
             const float2 screen(make_float2(ix + subpixel_jitter.x, iy + subpixel_jitter.y)
                             / make_float2(optixGetLaunchDimensions().x, optixGetLaunchDimensions().y) * 2.0 - 1.0);
@@ -218,7 +198,6 @@ extern "C" __global__ void __raygen__renderFrame() {
 
             float3 rayDir = normalize(lensCentre - cPos);
 
-            //float3 proj_frente_rayDir = (dot(rayDir,frente)/(length(frente)*length(frente)))*frente; //frente ta normalizado POSSO SIMPLIFICAR
             float3 proj_frente_rayDir = dot(rayDir,frente)*frente;
 
 

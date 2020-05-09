@@ -515,7 +515,9 @@ extern "C" __global__ void __raygen__renderFrame() {
 		printf("===========================================\n");
 	}
 
-    float lensDistance = optixLaunchParams.global->lensDistance;
+    float lensDistance  = optixLaunchParams.global->lensDistance;
+    float focalDistance = optixLaunchParams.global->focalDistance;
+    float aperture = optixLaunchParams.global->aperture;
     float3 frente = normalize(cross(camera.vertical,camera.horizontal));
     float3 lensCentre = camera.position + frente*lensDistance;
 
@@ -555,11 +557,26 @@ extern "C" __global__ void __raygen__renderFrame() {
             float3 cPos = camera.position+(-screen.x)*camera.horizontal + (-screen.y ) * camera.vertical;
 
             float3 rayDir = normalize(lensCentre - cPos);
+
+            float3 pFocal = normalize(rayDir); // ESPAÇO CAMERA
+
+            pFocal = pFocal / pFocal.z * (1/((1/focalDistance)-(1/lensDistance))); //d0
+
+            float randR = aperture * sqrt(rnd(seed));
+
+            float randA = rnd(seed) * 2 * M_PIf;
+
+            float x = randR * cos(randA);
+            float y = randR * sin(randA);
+
+            float3 randAperture = make_float3(((lensCentre.x + camera.horizontal * x),(lensCentre.y + camera.vertical * y),lensCentre.z));
+
+            float3 rayDirection = pFocal - randAperture;
             
             // trace primary ray
             optixTrace(optixLaunchParams.traversable,
                     lensCentre,
-                    rayDir,
+                    rayDirection,
                     0.f,    // tmin
                     1e20f,  // tmax
                     0.0f,   // rayTime
@@ -574,7 +591,7 @@ extern "C" __global__ void __raygen__renderFrame() {
             green += pixelColorPRD.color.y / (raysPerPixel*raysPerPixel);
             blue += pixelColorPRD.color.z / (raysPerPixel*raysPerPixel);
         }
-}
+    }
 
     //convert float (0-1) to int (0-255)
     const int r = int(255.0f*red);

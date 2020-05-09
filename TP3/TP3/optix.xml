@@ -60,18 +60,18 @@
 				</rtVertexAttributes>
 
 				<rtEntryPoint>
-					<rayGen file="optix.ptx" proc="__raygen__renderFrame"/> 
+					<rayGen file="TP3.ptx" proc="__raygen__renderFrame"/> 
 				</rtEntryPoint>
 				<rtDefaultMaterial>
 					<rayType name="Phong">
-						<rtProgram type="ANY_HIT" file="optix.ptx" proc="__anyhit__radiance"/> 
-						<rtProgram type="CLOSEST_HIT" file="optix.ptx" proc="__closesthit__radiance"/> 
-						<rtProgram type="MISS" 		 file="optix.ptx" proc="__miss__radiance"/> 
+						<rtProgram type="ANY_HIT" file="TP3.ptx" proc="__anyhit__radiance"/> 
+						<rtProgram type="CLOSEST_HIT" file="TP3.ptx" proc="__closesthit__radiance"/> 
+						<rtProgram type="MISS" 		 file="TP3.ptx" proc="__miss__radiance"/> 
 					</rayType>
 					<rayType name="Shadow">
-						<rtProgram type="ANY_HIT" file="optix.ptx" proc="__anyhit__shadow"/> 
-						<rtProgram type="CLOSEST_HIT" file="optix.ptx" proc="__closesthit__shadow"/> 
-						<rtProgram type="MISS" 		 file="optix.ptx" proc="__miss__shadow"/> 
+						<rtProgram type="ANY_HIT" file="TP3.ptx" proc="__anyhit__shadow"/> 
+						<rtProgram type="CLOSEST_HIT" file="TP3.ptx" proc="__closesthit__shadow"/> 
+						<rtProgram type="MISS" 		 file="TP3.ptx" proc="__miss__shadow"/> 
 					</rayType>
 				</rtDefaultMaterial>
                 <rtGlobalParams>

@@ -1,0 +1,20 @@
+\par Neste trabalho pretende-se implementar ambient occlusion através de ray tracing.
+Ambient occlusion é uma técnica utilizada para estimar a iluminação numa cena causada pela luz ambiente.
+Para efetuar o seu cálculo através de ray tracing, quando um raio lançado atinge uma superfície difusa, são lançados vários raios para pontos aleatórios na superfície de um hemisfério, excluindo a base deste, com centro no ponto que o raio atingiu, um eixo de rotação definido pela normal do ponto atingido e um raio a definir.
+O fator de oclusão será definido pelo número de raios intercetados por qualquer superfície sobre o número de raios lançados.
+
+\par Para obter resultados fiáveis, é necessário realizar uma boa amostragem da superfície do hemisfério.
+Para obter amostras uniformes da superfície do hemisfério, foi utilizado o seguinte fragmento de código que indica um ponto (x,y,z) na superfície de um hemisfério com centro no ponto (0,0,0) e eixo de rotação igual ao eixo y:
+
+\begin{verbatim}
+float r = sqrt(u);
+float b = 2*M_PIf*v;
+float x = r*sin(b);
+float z = r*cos(b);
+float y = sqrt(1-r*r);
+\end{verbatim}
+onde \texttt{u} e \texttt{v} são números obtidos aleatoriamente de uma distribuição uniforme entre 0 e 1 e \texttt{M\_PIf} corresponde ao valor de $\pi$.
+
+\par Com a amostragem realizada, obtém-se um ponto na superfície do hemisfério igual ao vetor que parte do centro do hemisfério em direção ao mesmo ponto na superfície do hemisfério.
+Este vetor é convertido para o espaço mundo e define a direção de um raio a lançar que irá devolver a cor branca caso resulte num miss e a cor preta caso ocorra uma colisão.
+Os valores de todos os raios lançados são somados e posteriormente divididos pelo total de raios lançados.
